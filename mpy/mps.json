@@ -1,0 +1,22 @@
+{
+  "name": "pomodoro",
+  "version": "0.0.2",
+  "description": "Pomodoro timer for PixelMug with busy/rest pixel transitions.",
+  "author": "jeejio",
+  "category": "Productivity",
+  "dependencies": [
+    {
+      "name": "micropyxel",
+      "version": ">=1.0.0"
+    },
+    {
+      "name": "maopaoBle",
+      "version": ">=1.0.0"
+    },
+    {
+      "name": "simpletouch",
+      "version": ">=1.0.0"
+    }
+  ],
+  "date": "2026-06-16"
+}

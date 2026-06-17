@@ -1,0 +1,23 @@
+# Python / MicroPython build artifacts
+__pycache__/
+*.py[cod]
+*.mpy
+
+# Packaged MPS output
+mpy/dist/
+*.mps
+
+# WebApp dependencies and build output
+webapp/node_modules/
+webapp/dist/
+
+# Logs and local environment
+*.log
+.env
+.env.*
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

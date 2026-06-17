@@ -1,0 +1,12 @@
+{
+  "name": "mps-pomodoro",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm --prefix webapp run dev",
+    "build": "npm --prefix webapp run build",
+    "bot": "node bot/pomodoro-bot.js",
+    "preview": "npm --prefix webapp run preview"
+  }
+}
