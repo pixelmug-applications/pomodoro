@@ -1,3 +1,5 @@
+assets/
+
 # Python / MicroPython build artifacts
 __pycache__/
 *.py[cod]
