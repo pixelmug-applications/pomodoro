@@ -86,7 +86,7 @@ export async function openMpsApp(
     return result;
   }
 
-  if (code === 263) {
+  if (code === 263 || code === 265) {
     options.onPhase?.('switching');
   } else if (code === 260 || code === 261 || code === 262) {
     options.onPhase?.('preparing');

@@ -1,4 +1,6 @@
 assets/
+bot/config.dev.js
+bot/config.pub.js
 
 # Python / MicroPython build artifacts
 __pycache__/

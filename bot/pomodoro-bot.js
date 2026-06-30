@@ -5,14 +5,13 @@ import { extname, join, normalize, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BubbleBot, InlineKeyboard } from "../../jeejio-bubble/sdk/BubbleSDK.js";
 import PixelMug from "../../jeejio-bubble/devices/PixelMug_1.1.js";
+import { apiBaseUrl, token } from "./config.js";
 
-const token = process.env.BUBBLE_BOT_TOKEN;
-const apiBaseUrl = process.env.BUBBLE_API_BASE_URL || "https://api.devjeejio.com:5443/im/";
 const staticPort = Number(process.env.WEBAPP_PORT || 8893);
 const webAppHost = process.env.WEBAPP_HOST || localAddressHint();
 const generatedWebAppUrl = `http://${webAppHost}:${staticPort}/index.html`;
 const mpsLaunchConfig = {
-  id: process.env.MPS_ID || "3620738048",
+  id: process.env.MPS_ID || "4514905089",
   version: process.env.MPS_VERSION || "0.0.2",
 };
 const webAppUrl = withMpsLaunchConfig(process.env.WEBAPP_URL || generatedWebAppUrl);
@@ -23,6 +22,7 @@ if (!token) {
 }
 
 const pixelMug = new PixelMug();
+pixelMug.compatible = ["PixelMugS1"];
 const bot = new BubbleBot(token, {
   apiBaseUrl,
   debug: process.env.DEBUG !== "false",
