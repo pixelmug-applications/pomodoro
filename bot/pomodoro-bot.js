@@ -5,13 +5,13 @@ import { extname, join, normalize, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BubbleBot, InlineKeyboard } from "../../jeejio-bubble/sdk/BubbleSDK.js";
 import PixelMug from "../../jeejio-bubble/devices/PixelMug_1.1.js";
-import { apiBaseUrl, token } from "./config.js";
+import { apiBaseUrl, token } from "./config.dev.js";
 
 const staticPort = Number(process.env.WEBAPP_PORT || 8893);
 const webAppHost = process.env.WEBAPP_HOST || localAddressHint();
 const generatedWebAppUrl = `http://${webAppHost}:${staticPort}/index.html`;
 const mpsLaunchConfig = {
-  id: process.env.MPS_ID || "4514905089",
+  id: process.env.MPS_ID || "3620738048",
   version: process.env.MPS_VERSION || "0.0.2",
 };
 const webAppUrl = withMpsLaunchConfig(process.env.WEBAPP_URL || generatedWebAppUrl);

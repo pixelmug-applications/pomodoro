@@ -8,6 +8,7 @@ except ImportError:
 import maopaoBle
 import micropyxel as pyxel
 from simpletouch import SimpleTouch
+from pomodoro_sound import PromptSoundPlayer
 
 
 APP = None
@@ -15,6 +16,7 @@ APP = None
 FPS = 20
 SCREEN_W = 32
 SCREEN_H = 16
+TOUCH_PIN = 38
 
 ASSET_PATH = "assets/pixels.png"
 CONFIG_PATH = "pomodoro_config.json"
@@ -43,6 +45,8 @@ COUNTER_Y = 11
 COLKEY = 0
 TEXT_COLOR = 7
 DIM_TEXT_COLOR = 6
+TOUCH_CLICK_EVENTS = ("click", "single", "single_click", "tap", "hit")
+TOUCH_DOUBLE_EVENTS = ("double", "double_click", "double click")
 
 STATE_READY = "P1"
 STATE_WORK = "P2-W"
@@ -52,13 +56,13 @@ STATE_STOP = "P3-S"
 STATE_TRANSITION = "TRANS"
 
 DEFAULT_CONFIG = {
-    "focusMin": 25,
+    "focusMin": 2,
     "autoStartNext": False,
-    "cycleCount": 4,
-    "shortBreakMin": 5,
-    "longBreakMin": 15,
+    "cycleCount": 1,
+    "shortBreakMin": 1,
+    "longBreakMin": 2,
     "soundEnabled": True,
-    "endSound": "classic",
+    "soundTheme": "classic",
     "theme": "pulse",
 }
 
@@ -146,6 +150,8 @@ def validate_config(config):
         return False, "config_not_object"
 
     cfg = clone_config(config)
+    if "soundTheme" not in config and "endSound" in config:
+        cfg["soundTheme"] = config.get("endSound")
     for key in ("focusMin", "shortBreakMin", "longBreakMin"):
         try:
             value = int(cfg[key])
@@ -167,8 +173,8 @@ def validate_config(config):
         return False, "autoStartNext"
     if not is_bool(cfg["soundEnabled"]):
         return False, "soundEnabled"
-    if cfg["endSound"] not in ("classic", "gentle"):
-        return False, "endSound"
+    if cfg["soundTheme"] not in ("classic", "gentle"):
+        return False, "soundTheme"
     if cfg["theme"] not in ("pulse", "retro"):
         return False, "theme"
 
@@ -201,9 +207,10 @@ class PomodoroMpyApp:
         self.last_timer_ms = time.ticks_ms()
         self.last_tick_event_ms = 0
 
-        self.touch = SimpleTouch(pin_no=13, active_high=True, debounce_ms=20, dbl_ms=350)
+        self.touch = SimpleTouch(pin_no=TOUCH_PIN, active_high=True, debounce_ms=20, dbl_ms=350)
+        self.prompt_sound = PromptSoundPlayer()
 
-        pyxel.init()
+        pyxel.init(start_audio=False)
         pyxel.images(0).load_from_png(0, 0, ASSET_PATH, True)
 
     def run(self):
@@ -211,6 +218,10 @@ class PomodoroMpyApp:
         pyxel.run(self.update, self.draw, fps=FPS, on_exit=self.on_exit)
 
     def on_exit(self, rt, reason, exc):
+        try:
+            self.prompt_sound.deinit()
+        except Exception:
+            pass
         try:
             pyxel.destroy()
         except Exception:
@@ -233,6 +244,8 @@ class PomodoroMpyApp:
                 else:
                     self.enter_ready()
 
+        self.prompt_sound.update(budget_packets=4)
+
     def draw(self, rt):
         pyxel.cls(0)
         self.draw_status_art()
@@ -243,38 +256,41 @@ class PomodoroMpyApp:
             event = self.touch.get()
             if event is None:
                 return
+            action = self.normalize_touch_event(event)
+            if action is None:
+                continue
             before = self.state
-            if event == "click":
-                self.on_click()
-            elif event == "double":
+            if action == "click":
+                if self.prompt_sound.is_playing():
+                    self.prompt_sound.stop()
+                else:
+                    self.on_click()
+            elif action == "double":
                 self.on_double()
             self.send_event("touch", {
-                "action": event,
+                "action": action,
                 "stateBefore": before,
                 "stateAfter": self.state,
             })
 
     def on_click(self):
-        if self.state == STATE_READY:
+        if self.state == STATE_READY and self.visual == "busy":
             self.start_work_with_transition()
-        elif self.state == STATE_WORK or self.state == STATE_REST:
-            self.paused = not self.paused
-            self.last_timer_ms = time.ticks_ms()
-            self.send_state_event()
-        elif self.state == STATE_DONE:
-            self.finish_done_feedback()
-        elif self.state == STATE_STOP:
-            self.enter_ready()
 
     def on_double(self):
-        if self.state == STATE_READY:
-            self.next_focus_duration()
-        elif self.state == STATE_WORK or self.state == STATE_REST:
-            self.enter_stop_feedback()
-        elif self.state == STATE_DONE:
-            self.finish_done_feedback()
-        elif self.state == STATE_STOP:
-            self.enter_ready()
+        self.reset_to_busy_ready()
+
+    def normalize_touch_event(self, event):
+        try:
+            event_name = str(event).strip().lower()
+        except Exception:
+            return None
+        if event_name in TOUCH_CLICK_EVENTS:
+            return "click"
+        if event_name in TOUCH_DOUBLE_EVENTS:
+            return "double"
+        print("[Pomodoro] unknown touch event:", event_name)
+        return None
 
     def next_focus_duration(self):
         current = self.config["focusMin"]
@@ -314,6 +330,7 @@ class PomodoroMpyApp:
         self.time_left_sec = self.duration_sec
         self.last_timer_ms = time.ticks_ms()
         self.send_state_event()
+        self.play_prompt_sound("start")
 
     def start_rest_with_transition(self):
         if self.completed_cycles >= self.config["cycleCount"]:
@@ -351,6 +368,10 @@ class PomodoroMpyApp:
         self.paused = False
         self.last_timer_ms = time.ticks_ms()
         self.send_state_event()
+        if self.state == STATE_WORK:
+            self.play_prompt_sound("start")
+        elif self.state == STATE_REST:
+            self.play_prompt_sound("end")
 
     def update_timer(self, now):
         if self.paused:
@@ -380,8 +401,6 @@ class PomodoroMpyApp:
     def enter_done_feedback(self, from_phase):
         self.state = STATE_DONE
         self.done_from_phase = from_phase
-        # Sound reminder is intentionally ignored in this first mpy version, so
-        # DONE immediately advances to the visual transition on the next update.
         self.feedback_until_ms = time.ticks_ms()
         self.send_state_event()
 
@@ -394,6 +413,7 @@ class PomodoroMpyApp:
             self.enter_ready()
 
     def enter_stop_feedback(self):
+        self.prompt_sound.stop()
         self.state = STATE_STOP
         self.phase = "stop"
         self.paused = False
@@ -401,6 +421,7 @@ class PomodoroMpyApp:
         self.send_state_event()
 
     def enter_ready(self, emit=True):
+        self.prompt_sound.stop()
         self.state = STATE_READY
         self.visual = "busy"
         self.phase = "ready"
@@ -410,6 +431,22 @@ class PomodoroMpyApp:
         self.done_from_phase = None
         if emit:
             self.send_state_event()
+
+    def reset_to_busy_ready(self):
+        self.completed_cycles = 0
+        self.transition_kind = None
+        self.transition_target = None
+        self.transition_phase = None
+        self.transition_duration_sec = 0
+        self.enter_ready()
+
+    def play_prompt_sound(self, kind):
+        print("[Pomodoro] play_prompt_sound", "kind=", kind, "enabled=", self.config["soundEnabled"], "theme=", self.config["soundTheme"], "state=", self.state, "phase=", self.phase)
+        if not self.config["soundEnabled"]:
+            print("[Pomodoro] prompt sound skipped: disabled")
+            return
+        ok = self.prompt_sound.start(self.config["soundTheme"], kind)
+        print("[Pomodoro] prompt sound start result:", ok)
 
     def draw_status_art(self):
         if self.state == STATE_TRANSITION:
