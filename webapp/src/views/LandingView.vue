@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { LOADING_IMAGE } from '../assets';
+import { t } from '../i18n';
 import { useTemplateTimer } from '../state/templateTimer';
 
 type LandingStep = 'open' | 'enter';
@@ -35,8 +36,8 @@ async function handleEnter() {
     </div>
 
     <div class="landing-copy">
-      <h1>番茄时钟</h1>
-      <p>A Pomodoro timer that keeps you focused with balanced work and rest cycles.</p>
+      <h1>{{ t('app.title') }}</h1>
+      <p>{{ t('landing.subtitle') }}</p>
     </div>
 
     <div class="landing-actions">

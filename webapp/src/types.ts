@@ -19,7 +19,6 @@ export type AppStatus =
   | 'error';
 
 export type EndSound = 'classic' | 'gentle';
-export type ScreenTheme = 'pulse' | 'retro';
 
 export type PomodoroConfig = {
   focusMin: number;
@@ -29,7 +28,6 @@ export type PomodoroConfig = {
   longBreakMin: number;
   soundEnabled: boolean;
   endSound: EndSound;
-  theme: ScreenTheme;
 };
 
 export type PomodoroRuntimeState = {

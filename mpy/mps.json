@@ -1,6 +1,6 @@
 {
   "name": "pomodoro",
-  "version": "0.0.2",
+  "version": "1.0.1",
   "description": "Pomodoro timer for PixelMug with busy/rest pixel transitions.",
   "author": "jeejio",
   "category": "Productivity",
@@ -14,11 +14,11 @@
       "version": ">=1.0.0"
     },
     {
-      "name": "maopaoBle",
+      "name": "mpy_button",
       "version": ">=1.0.0"
-    },
+    },    
     {
-      "name": "simpletouch",
+      "name": "maopaoBle",
       "version": ">=1.0.0"
     }
   ],

@@ -5,10 +5,11 @@ try:
 except ImportError:
     import json
 
+import audio_service
 import maopaoBle
 import micropyxel as pyxel
-from simpletouch import SimpleTouch
-from pomodoro_sound import PromptSoundPlayer
+import mpy_button as touch_events
+from pyxel_prompt_sound import PromptSoundPlayer
 
 
 APP = None
@@ -16,10 +17,12 @@ APP = None
 FPS = 20
 SCREEN_W = 32
 SCREEN_H = 16
-TOUCH_PIN = 38
 
 ASSET_PATH = "assets/pixels.png"
 CONFIG_PATH = "pomodoro_config.json"
+PROMPT_SOUND_VOLUME = 100
+PROMPT_SOUND_DEBUG = True
+PROMPT_SOUND_PACKETS_PER_UPDATE = 4
 
 BUSY_U = 0
 BUSY_V = 0
@@ -207,10 +210,18 @@ class PomodoroMpyApp:
         self.last_timer_ms = time.ticks_ms()
         self.last_tick_event_ms = 0
 
-        self.touch = SimpleTouch(pin_no=TOUCH_PIN, active_high=True, debounce_ms=20, dbl_ms=350)
-        self.prompt_sound = PromptSoundPlayer()
+        self.audio = audio_service.audio
+        self.audio_initialized = False
+        self.prompt_sound = PromptSoundPlayer(
+            audio=self.audio,
+            asset_root="assets",
+            debug=PROMPT_SOUND_DEBUG,
+            log_prefix="[PomodoroSound]",
+            stop_handler=self.stop_prompt_sound,
+        )
 
         pyxel.init(start_audio=False)
+        self.clear_touch_events()
         pyxel.images(0).load_from_png(0, 0, ASSET_PATH, True)
 
     def run(self):
@@ -222,6 +233,12 @@ class PomodoroMpyApp:
             self.prompt_sound.deinit()
         except Exception:
             pass
+        if self.audio_initialized:
+            try:
+                self.audio.deinit()
+            except Exception:
+                pass
+            self.audio_initialized = False
         try:
             pyxel.destroy()
         except Exception:
@@ -229,7 +246,6 @@ class PomodoroMpyApp:
 
     def update(self, rt):
         maopaoBle.poll()
-        self.touch.update()
         self.handle_touch_events()
 
         now = time.ticks_ms()
@@ -244,16 +260,22 @@ class PomodoroMpyApp:
                 else:
                     self.enter_ready()
 
-        self.prompt_sound.update(budget_packets=4)
+        self.prompt_sound.update(budget_packets=PROMPT_SOUND_PACKETS_PER_UPDATE)
 
     def draw(self, rt):
         pyxel.cls(0)
         self.draw_status_art()
         self.draw_counter()
 
+    def clear_touch_events(self):
+        try:
+            touch_events.clear()
+        except Exception as exc:
+            print("[Pomodoro] touch clear failed:", exc)
+
     def handle_touch_events(self):
         while True:
-            event = self.touch.get()
+            event = touch_events.get()
             if event is None:
                 return
             action = self.normalize_touch_event(event)
@@ -445,8 +467,35 @@ class PomodoroMpyApp:
         if not self.config["soundEnabled"]:
             print("[Pomodoro] prompt sound skipped: disabled")
             return
-        ok = self.prompt_sound.start(self.config["soundTheme"], kind)
+        if not self.ensure_audio():
+            return
+        ok = self.prompt_sound.play_theme(self.config["soundTheme"], kind, interrupt=True)
         print("[Pomodoro] prompt sound start result:", ok)
+
+    def stop_prompt_sound(self, player=None):
+        if player is None:
+            player = self.prompt_sound
+        return player.cancel()
+
+    def ensure_audio(self):
+        if self.audio_initialized:
+            print("[PomodoroSound] audio already initialized")
+            return True
+        try:
+            print("[PomodoroSound] audio init begin")
+            self.audio.init(
+                enable_input=False,
+                enable_output=True,
+                with_opus_encoder=False,
+                with_opus_decoder=True,
+            )
+            self.audio.configure(output_volume=PROMPT_SOUND_VOLUME, input_gain=1.0)
+            self.audio_initialized = True
+            print("[PomodoroSound] audio init ok", "volume=", PROMPT_SOUND_VOLUME)
+            return True
+        except Exception as exc:
+            print("[Pomodoro] audio init failed:", exc)
+            return False
 
     def draw_status_art(self):
         if self.state == STATE_TRANSITION:

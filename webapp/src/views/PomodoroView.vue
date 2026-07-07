@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { SOUND_PREVIEWS } from '../assets';
+import { t } from '../i18n';
 import { useTemplateTimer } from '../state/templateTimer';
-import type { EndSound, PomodoroConfig, ScreenTheme } from '../types';
+import type { EndSound, PomodoroConfig } from '../types';
 
 const store = useTemplateTimer();
 const durations = [15, 25, 45];
 const expanded = ref({
   options: true,
   sound: true,
-  screen: true,
 });
 const customOpen = ref(!durations.includes(store.state.config.focusMin));
 let previewAudio: HTMLAudioElement | null = null;
@@ -17,10 +17,10 @@ const activePreview = ref<EndSound | null>(null);
 
 const config = computed(() => store.state.config);
 const syncDisabled = computed(() => store.busy.value || !store.canSend.value);
-const syncLabel = computed(() => (store.state.status === 'syncing' ? 'Syncing...' : 'Show'));
-const focusLabel = computed(() => `${config.value.focusMin} min`);
+const syncLabel = computed(() => (store.state.status === 'syncing' ? t('action.syncing') : t('action.show')));
+const focusLabel = computed(() => String(config.value.focusMin) + ' ' + t('unit.min'));
 const restLabel = computed(() => {
-  return `${config.value.shortBreakMin}m short / ${config.value.longBreakMin}m long`;
+  return t('summary.restFormat', { short: config.value.shortBreakMin, long: config.value.longBreakMin });
 });
 
 function selectDuration(value: number) {
@@ -110,23 +110,19 @@ function toInt(value: string, min: number, max: number, fallback: number) {
 
     <section class="summary-strip">
       <div>
-        <span>Breaks</span>
+        <span>{{ t('summary.breaks') }}</span>
         <strong>{{ restLabel }}</strong>
       </div>
       <div>
-        <span>Cycles</span>
+        <span>{{ t('summary.cycles') }}</span>
         <strong>{{ config.cycleCount }}</strong>
-      </div>
-      <div>
-        <span>Theme</span>
-        <strong>{{ config.theme === 'pulse' ? 'Pulse' : 'Retro' }}</strong>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-title">
         <span class="panel-icon">T</span>
-        <h2>Focus Duration</h2>
+        <h2>{{ t('settings.focusDuration') }}</h2>
       </div>
       <div class="duration-grid">
         <button
@@ -139,11 +135,11 @@ function toInt(value: string, min: number, max: number, fallback: number) {
           {{ duration }}m
         </button>
         <button type="button" :class="{ selected: customOpen }" @click="customOpen = true">
-          Custom
+          {{ t('settings.custom') }}
         </button>
       </div>
       <div v-if="customOpen" class="custom-row">
-        <label for="focus-min">Minutes</label>
+        <label for="focus-min">{{ t('settings.minutes') }}</label>
         <input
           id="focus-min"
           type="number"
@@ -158,12 +154,12 @@ function toInt(value: string, min: number, max: number, fallback: number) {
 
     <section class="accordion">
       <button type="button" class="accordion-head" @click="toggle('options')">
-        <span>Pomodoro Options</span>
+        <span>{{ t('settings.options') }}</span>
         <b>{{ expanded.options ? '-' : '+' }}</b>
       </button>
       <div v-if="expanded.options" class="accordion-body">
         <label class="setting-row">
-          <span>Auto-start next tomato</span>
+          <span>{{ t('settings.autoStartNext') }}</span>
           <input
             type="checkbox"
             :checked="config.autoStartNext"
@@ -171,7 +167,7 @@ function toInt(value: string, min: number, max: number, fallback: number) {
           />
         </label>
         <label class="setting-row">
-          <span>Cycles count</span>
+          <span>{{ t('settings.cyclesCount') }}</span>
           <input
             type="number"
             min="1"
@@ -182,7 +178,7 @@ function toInt(value: string, min: number, max: number, fallback: number) {
           />
         </label>
         <label class="setting-row">
-          <span>Short Break (min)</span>
+          <span>{{ t('settings.shortBreak') }}</span>
           <input
             type="number"
             min="1"
@@ -193,7 +189,7 @@ function toInt(value: string, min: number, max: number, fallback: number) {
           />
         </label>
         <label class="setting-row">
-          <span>Long Break (min)</span>
+          <span>{{ t('settings.longBreak') }}</span>
           <input
             type="number"
             min="1"
@@ -208,12 +204,12 @@ function toInt(value: string, min: number, max: number, fallback: number) {
 
     <section class="accordion">
       <button type="button" class="accordion-head" @click="toggle('sound')">
-        <span>Sound & Alerts</span>
+        <span>{{ t('settings.soundAlerts') }}</span>
         <b>{{ expanded.sound ? '-' : '+' }}</b>
       </button>
       <div v-if="expanded.sound" class="accordion-body">
         <label class="setting-row">
-          <span>Sound Master Switch</span>
+          <span>{{ t('settings.soundMaster') }}</span>
           <input
             type="checkbox"
             :checked="config.soundEnabled"
@@ -226,39 +222,14 @@ function toInt(value: string, min: number, max: number, fallback: number) {
             :class="{ selected: config.endSound === 'classic', playing: activePreview === 'classic' }"
             @click="chooseSound('classic')"
           >
-            Classic
+            {{ t('settings.classic') }}
           </button>
           <button
             type="button"
             :class="{ selected: config.endSound === 'gentle', playing: activePreview === 'gentle' }"
             @click="chooseSound('gentle')"
           >
-            Gentle
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <section class="accordion">
-      <button type="button" class="accordion-head" @click="toggle('screen')">
-        <span>Screen Display</span>
-        <b>{{ expanded.screen ? '-' : '+' }}</b>
-      </button>
-      <div v-if="expanded.screen" class="accordion-body">
-        <div class="segmented">
-          <button
-            type="button"
-            :class="{ selected: config.theme === 'pulse' }"
-            @click="update({ theme: 'pulse' as ScreenTheme })"
-          >
-            Pulse
-          </button>
-          <button
-            type="button"
-            :class="{ selected: config.theme === 'retro' }"
-            @click="update({ theme: 'retro' as ScreenTheme })"
-          >
-            Retro
+            {{ t('settings.gentle') }}
           </button>
         </div>
       </div>
