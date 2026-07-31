@@ -19,6 +19,8 @@ webapp/dist/
 *.log
 .env
 .env.*
+bot/config.dev.js
+bot/config.pub.js
 
 # Editor / OS noise
 .DS_Store

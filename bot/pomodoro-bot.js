@@ -4,15 +4,15 @@ import { createServer } from "node:http";
 import { extname, join, normalize, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BubbleBot, InlineKeyboard } from "../../jeejio-bubble/sdk/BubbleSDK.js";
-import PixelMug from "../../jeejio-bubble/devices/PixelMug_1.1.js";
-import { apiBaseUrl, token } from "./config.pub.js";
+import PixelMugS1 from "../../jeejio-bubble/devices/ext/PixelMugS1_1.0.ext.js";
+import { apiBaseUrl, token, mpsID, mpsVersion } from "./config.dev.js";
 
 const staticPort = Number(process.env.WEBAPP_PORT || 8893);
 const webAppHost = process.env.WEBAPP_HOST || localAddressHint();
 const generatedWebAppUrl = `http://${webAppHost}:${staticPort}/index.html`;
 const mpsLaunchConfig = {
-  id: process.env.MPS_ID || "4514905089",
-  version: process.env.MPS_VERSION || "1.0.2",
+  id: mpsID,
+  version: mpsVersion,
 };
 const webAppUrl = withMpsLaunchConfig(process.env.WEBAPP_URL || generatedWebAppUrl);
 const shouldServeStatic = !process.env.WEBAPP_URL;
@@ -42,8 +42,7 @@ if (!token) {
   throw new Error("Missing BUBBLE_BOT_TOKEN. Set it before running this bot.");
 }
 
-const pixelMug = new PixelMug();
-pixelMug.compatible = ["PixelMugS1"];
+const pixelMug = new PixelMugS1();
 const bot = new BubbleBot(token, {
   apiBaseUrl,
   debug: process.env.DEBUG !== "false",

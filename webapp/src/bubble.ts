@@ -1,5 +1,4 @@
 export {
-  getPixelMugSdk,
   getWebApp,
   hasJeeWebBridge,
   loadPixelMug,

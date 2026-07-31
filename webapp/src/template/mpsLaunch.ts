@@ -1,12 +1,11 @@
 import type { DeviceInfo } from '../types';
 import {
-  getPixelMugSdk,
   getWebApp,
   hasJeeWebBridge,
   onPixelMugEvent,
   subscribePixelMugEvents,
 } from './bubbleClient';
-import type { DeviceEventPayload } from './bubbleClient';
+import type { DeviceEventItem, DeviceEventPayload } from './bubbleClient';
 
 export type MpsLaunchConfig = {
   id: string;
@@ -20,6 +19,9 @@ const DEV_MPS_VERSION = import.meta.env.VITE_MPS_VERSION || '0.0.20';
 const MPS_OPEN_TIMEOUT_MS = 45000;
 const READY_EVENTS = new Set(['MPS_IS_RUNNING']);
 const FAILED_EVENTS = new Set(['INSTALL_FAIL', 'RUNNING_FAIL']);
+const MPY_VM_ERROR_EVENT = 'mpyVmError';
+const MPY_VM_STATE_EVENT = 'mpyVmEvent';
+const RUNNING_FAIL_MESSAGE = 'Install success. App internal error';
 
 let pendingLaunch:
   | {
@@ -32,6 +34,11 @@ let pendingLaunch:
   | null = null;
 let mpsEventBound = false;
 const lastMpsEventByDevice = new Map<string, string>();
+const lastMpsErrorByDevice = new Map<string, MpsInstallError>();
+
+type MpsInstallError = {
+  code: string;
+};
 
 export function getMpsLaunchConfig(): MpsLaunchConfig {
   const params = new URLSearchParams(globalThis.location?.search || '');
@@ -42,10 +49,13 @@ export function getMpsLaunchConfig(): MpsLaunchConfig {
 }
 
 export async function installMpsApp(device: DeviceInfo, config = getMpsLaunchConfig()) {
-  const rpc = getPixelMugSdk().rpc.talMpyExecOneScript({
-    id: config.id,
-    version: config.version,
-  });
+  const rpc = {
+    method: 'talMpyExecOneScript',
+    params: {
+      id: config.id,
+      version: config.version,
+    },
+  };
 
   if (!hasJeeWebBridge()) {
     return { code: 200, result: { value: 264 }, mock: true, config };
@@ -131,7 +141,7 @@ function waitForMpsRunning(
   const lastEvent = lastMpsEventByDevice.get(key);
   if (lastEvent && READY_EVENTS.has(lastEvent)) return Promise.resolve();
   if (lastEvent && FAILED_EVENTS.has(lastEvent)) {
-    return Promise.reject(new Error('Could not open app.'));
+    return Promise.reject(launchErrorForFailedEvent(lastEvent, key));
   }
 
   clearPendingLaunch();
@@ -154,7 +164,21 @@ function handleMpsDeviceEvent(event: DeviceEventPayload) {
   const key = device ? deviceKey(device) : '';
 
   for (const item of events) {
-    if ((item.method || item.name) !== 'mpyVmEvent') continue;
+    const eventName = item.method || item.name;
+    if (eventName === MPY_VM_ERROR_EVENT) {
+      const installError = parseMpsInstallError(item);
+      if (key) lastMpsErrorByDevice.set(key, installError);
+
+      if (pendingLaunch && (!key || pendingLaunch.deviceKey === key)) {
+        const pending = pendingLaunch;
+        pendingLaunch = null;
+        clearTimeout(pending.timer);
+        pending.reject(formatMpsInstallError(installError));
+      }
+      continue;
+    }
+
+    if (eventName !== MPY_VM_STATE_EVENT) continue;
     const value = String(item.params?.value || '');
     if (!value) continue;
 
@@ -174,10 +198,39 @@ function handleMpsDeviceEvent(event: DeviceEventPayload) {
         const pending = pendingLaunch;
         pendingLaunch = null;
         clearTimeout(pending.timer);
-        pending.reject(new Error('Could not open app.'));
+        pending.reject(launchErrorForFailedEvent(value, key));
       }
     }
   }
+}
+
+function launchErrorForFailedEvent(value: string, key: string) {
+  if (value === 'RUNNING_FAIL') {
+    return new Error(RUNNING_FAIL_MESSAGE);
+  }
+
+  const installError = key ? lastMpsErrorByDevice.get(key) : undefined;
+  if (installError) {
+    return formatMpsInstallError(installError);
+  }
+
+  return new Error('Could not open app.');
+}
+
+function parseMpsInstallError(item: DeviceEventItem): MpsInstallError {
+  const rawValue = String(item.params?.value || '');
+  return {
+    code: parseInstallErrorCode(rawValue) || 'unknown',
+  };
+}
+
+function formatMpsInstallError(error: MpsInstallError) {
+  return new Error(`install error: code ${error.code}`);
+}
+
+function parseInstallErrorCode(value: string) {
+  const match = value.match(/INSTALL_ERROR:([-+]?\d+)/);
+  return match?.[1] || '';
 }
 
 function clearPendingLaunch() {
