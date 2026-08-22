@@ -36,9 +36,6 @@ type MessageKey =
   | 'settings.shortBreak'
   | 'settings.longBreak'
   | 'settings.soundAlerts'
-  | 'settings.soundMaster'
-  | 'settings.classic'
-  | 'settings.gentle'
   | 'action.show'
   | 'action.syncing'
   | 'ble.connected'
@@ -81,9 +78,6 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     'settings.shortBreak': "\u77ed\u4f11\u606f\uff08\u5206\u949f\uff09",
     'settings.longBreak': "\u957f\u4f11\u606f\uff08\u5206\u949f\uff09",
     'settings.soundAlerts': "\u58f0\u97f3\u4e0e\u63d0\u9192",
-    'settings.soundMaster': "\u58f0\u97f3\u603b\u5f00\u5173",
-    'settings.classic': "\u7ecf\u5178",
-    'settings.gentle': "\u8f7b\u67d4",
     'action.show': "\u540c\u6b65",
     'action.syncing': "\u540c\u6b65\u4e2d...",
     'ble.connected': "BLE \u5df2\u8fde\u63a5",
@@ -125,9 +119,6 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     'settings.shortBreak': 'Short Break (min)',
     'settings.longBreak': 'Long Break (min)',
     'settings.soundAlerts': 'Sound & Alerts',
-    'settings.soundMaster': 'Sound Master Switch',
-    'settings.classic': 'Classic',
-    'settings.gentle': 'Gentle',
     'action.show': 'Show',
     'action.syncing': 'Syncing...',
     'ble.connected': 'BLE connected',

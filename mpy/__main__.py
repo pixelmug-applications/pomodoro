@@ -6,9 +6,9 @@ except ImportError:
     import json
 
 import audio_service
-import maopaoBle
 import micropyxel as pyxel
 import mpy_button as touch_events
+from maopaoBleApp import BleAppService
 from pyxel_prompt_sound import PromptSoundPlayer
 
 
@@ -58,6 +58,11 @@ STATE_DONE = "P3-D"
 STATE_STOP = "P3-S"
 STATE_TRANSITION = "TRANS"
 
+PROMPT_SOUND_FILES = {
+    "focus_start": "focus_start.ogg",
+    "break_start": "break_start.ogg",
+}
+
 DEFAULT_CONFIG = {
     "focusMin": 2,
     "autoStartNext": False,
@@ -65,7 +70,6 @@ DEFAULT_CONFIG = {
     "shortBreakMin": 1,
     "longBreakMin": 2,
     "soundEnabled": True,
-    "soundTheme": "classic",
     "theme": "pulse",
 }
 
@@ -81,30 +85,6 @@ DIGITS = {
     "8": (0b111, 0b101, 0b111, 0b101, 0b111),
     "9": (0b111, 0b101, 0b111, 0b001, 0b111),
 }
-
-
-@maopaoBle.on_connect
-def ble_handle_connect(conn):
-    if APP is not None:
-        APP.ble_on_connect(conn)
-
-
-@maopaoBle.on_disconnect
-def ble_handle_disconnect(conn, reason):
-    if APP is not None:
-        APP.ble_on_disconnect(conn, reason)
-
-
-@maopaoBle.on_receive
-def ble_handle_receive(conn, data):
-    if APP is not None:
-        APP.ble_on_receive(conn, data)
-
-
-@maopaoBle.on_error
-def ble_handle_error(err):
-    if APP is not None:
-        APP.ble_on_error(err)
 
 
 def clone_config(src):
@@ -153,8 +133,6 @@ def validate_config(config):
         return False, "config_not_object"
 
     cfg = clone_config(config)
-    if "soundTheme" not in config and "endSound" in config:
-        cfg["soundTheme"] = config.get("endSound")
     for key in ("focusMin", "shortBreakMin", "longBreakMin"):
         try:
             value = int(cfg[key])
@@ -176,8 +154,6 @@ def validate_config(config):
         return False, "autoStartNext"
     if not is_bool(cfg["soundEnabled"]):
         return False, "soundEnabled"
-    if cfg["soundTheme"] not in ("classic", "gentle"):
-        return False, "soundTheme"
     if cfg["theme"] not in ("pulse", "retro"):
         return False, "theme"
 
@@ -190,6 +166,18 @@ class PomodoroMpyApp:
         self.conn = None
         self.connected = False
         self.last_error = None
+
+        self.ble = BleAppService("Pomodoro", app_version="1.0.0", max_message=384)
+        self.ble.command("hello", self.ble_cmd_hello, priority=0, mutates=False)
+        self.ble.command("open", self.ble_cmd_open, priority=1, mutates=False)
+        self.ble.command("sync_config", self.ble_cmd_sync_config, priority=1, mutates=False)
+        self.ble.command("get_state", self.ble_cmd_get_state, priority=0, mutates=False)
+        self.ble.command("control", self.ble_cmd_control, priority=1, mutates=False)
+        self.ble.set_state_provider(self.wire_state_payload)
+        self.ble.on_connect(self.ble_on_connect)
+        self.ble.on_ready(self.ble_on_ready)
+        self.ble.on_disconnect(self.ble_on_disconnect)
+        self.ble.on_error(self.ble_on_error)
 
         self.state = STATE_READY
         self.visual = "busy"
@@ -225,7 +213,7 @@ class PomodoroMpyApp:
         pyxel.images(0).load_from_png(0, 0, ASSET_PATH, True)
 
     def run(self):
-        maopaoBle.init()
+        self.ble.start()
         pyxel.run(self.update, self.draw, fps=FPS, on_exit=self.on_exit)
 
     def on_exit(self, rt, reason, exc):
@@ -243,9 +231,10 @@ class PomodoroMpyApp:
             pyxel.destroy()
         except Exception:
             pass
+        self.ble.deinit()
 
     def update(self, rt):
-        maopaoBle.poll()
+        self.ble.poll(budget_ms=3, max_messages=4)
         self.handle_touch_events()
 
         now = time.ticks_ms()
@@ -352,7 +341,7 @@ class PomodoroMpyApp:
         self.time_left_sec = self.duration_sec
         self.last_timer_ms = time.ticks_ms()
         self.send_state_event()
-        self.play_prompt_sound("start")
+        self.play_prompt_sound("focus_start")
 
     def start_rest_with_transition(self):
         if self.completed_cycles >= self.config["cycleCount"]:
@@ -391,9 +380,9 @@ class PomodoroMpyApp:
         self.last_timer_ms = time.ticks_ms()
         self.send_state_event()
         if self.state == STATE_WORK:
-            self.play_prompt_sound("start")
+            self.play_prompt_sound("focus_start")
         elif self.state == STATE_REST:
-            self.play_prompt_sound("end")
+            self.play_prompt_sound("break_start")
 
     def update_timer(self, now):
         if self.paused:
@@ -463,13 +452,17 @@ class PomodoroMpyApp:
         self.enter_ready()
 
     def play_prompt_sound(self, kind):
-        print("[Pomodoro] play_prompt_sound", "kind=", kind, "enabled=", self.config["soundEnabled"], "theme=", self.config["soundTheme"], "state=", self.state, "phase=", self.phase)
+        print("[Pomodoro] play_prompt_sound", "kind=", kind, "enabled=", self.config["soundEnabled"], "state=", self.state, "phase=", self.phase)
         if not self.config["soundEnabled"]:
             print("[Pomodoro] prompt sound skipped: disabled")
             return
+        filename = PROMPT_SOUND_FILES.get(kind)
+        if filename is None:
+            print("[Pomodoro] prompt sound skipped: invalid kind", kind)
+            return
         if not self.ensure_audio():
             return
-        ok = self.prompt_sound.play_theme(self.config["soundTheme"], kind, interrupt=True)
+        ok = self.prompt_sound.play(filename, interrupt=True)
         print("[Pomodoro] prompt sound start result:", ok)
 
     def stop_prompt_sound(self, player=None):
@@ -608,8 +601,11 @@ class PomodoroMpyApp:
 
     def ble_on_connect(self, conn):
         self.conn = conn
+        self.connected = False
+
+    def ble_on_ready(self, conn, session_id):
+        self.conn = conn
         self.connected = True
-        self.send_state_event()
 
     def ble_on_disconnect(self, conn, reason):
         if self.conn == conn:
@@ -620,132 +616,104 @@ class PomodoroMpyApp:
         self.last_error = err
         print("[Pomodoro] ble error:", err)
 
-    def ble_on_receive(self, conn, data):
-        self.conn = conn
-        self.connected = True
+    def ble_cmd_hello(self, params, message=None):
+        return {
+            "app": "pomodoro",
+            "protocol": 1,
+            "state": self.wire_state_payload(),
+        }
 
-        try:
-            if isinstance(data, bytes):
-                text = data.decode("utf-8")
-            else:
-                text = str(data)
-            msg = json.loads(text)
-        except Exception as exc:
-            self.send_error(None, None, "invalid_json", str(exc))
-            return
+    def ble_cmd_open(self, params, message=None):
+        self.enter_ready()
+        return {"state": self.wire_state_payload()}
 
-        if msg.get("type") != "cmd":
-            self.send_error(msg.get("id"), msg.get("cmd"), "invalid_type", "expected cmd")
-            return
+    def ble_cmd_get_state(self, params, message=None):
+        return {"state": self.wire_state_payload()}
 
-        cmd = msg.get("cmd")
-        req_id = msg.get("id")
-        payload = msg.get("payload") or {}
-
-        if cmd == "hello":
-            self.send_ack(req_id, cmd, True, {
-                "app": "pomodoro",
-                "protocol": 1,
-                "state": self.state_payload(),
-            })
-        elif cmd == "open":
-            self.enter_ready()
-            self.send_ack(req_id, cmd, True, {"state": self.state_payload()})
-        elif cmd == "sync_config":
-            self.handle_sync_config(req_id, cmd, payload)
-        elif cmd == "get_state":
-            self.send_ack(req_id, cmd, True, {"state": self.state_payload()})
-        elif cmd == "control":
-            self.handle_control(req_id, cmd, payload)
-        else:
-            self.send_error(req_id, cmd, "unknown_cmd", str(cmd))
-
-    def handle_sync_config(self, req_id, cmd, payload):
-        config = payload.get("config") or {}
+    def ble_cmd_sync_config(self, params, message=None):
+        config = params.get("config") or {}
         ok, result = validate_config(config)
         if not ok:
-            self.send_ack(req_id, cmd, False, {}, "invalid_config", result)
-            return
+            raise ValueError("invalid_config: %s" % result)
 
         self.config = result
         try:
             save_config(self.config)
         except Exception as exc:
-            self.send_ack(req_id, cmd, False, {}, "persist_failed", str(exc))
-            return
+            raise ValueError("persist_failed: %s" % exc)
 
-        apply_mode = payload.get("applyMode", "ready")
+        apply_mode = params.get("applyMode", "ready")
         if apply_mode == "defer" and (self.state == STATE_WORK or self.state == STATE_REST):
-            pass
+            self.send_state_event()
         elif apply_mode == "start":
             self.enter_ready(emit=False)
             self.start_work_with_transition()
         else:
             self.enter_ready()
 
-        self.send_ack(req_id, cmd, True, {"state": self.state_payload()})
+        # State changes publish separately; keep the command response small
+        # enough for the encrypted F150 envelope.
+        return {"ok": True}
 
-    def handle_control(self, req_id, cmd, payload):
-        action = payload.get("action")
+    def ble_cmd_control(self, params, message=None):
+        action = params.get("action")
         if action == "start":
             if self.state == STATE_READY:
                 self.start_work_with_transition()
-            self.send_ack(req_id, cmd, True, {"state": self.state_payload()})
         elif action == "toggle_pause":
             if self.state == STATE_WORK or self.state == STATE_REST:
                 self.paused = not self.paused
                 self.last_timer_ms = time.ticks_ms()
-            self.send_ack(req_id, cmd, True, {"state": self.state_payload()})
+                self.send_state_event()
         elif action == "stop":
             if self.state == STATE_WORK or self.state == STATE_REST:
                 self.enter_stop_feedback()
-            self.send_ack(req_id, cmd, True, {"state": self.state_payload()})
         elif action == "reset_ready":
             self.enter_ready()
-            self.send_ack(req_id, cmd, True, {"state": self.state_payload()})
         elif action == "next_duration":
             if self.state == STATE_READY:
                 self.next_focus_duration()
-            self.send_ack(req_id, cmd, True, {"state": self.state_payload()})
         else:
-            self.send_ack(req_id, cmd, False, {}, "invalid_action", str(action))
+            raise ValueError("invalid_action: %s" % action)
+        return {"state": self.wire_state_payload()}
 
     def send_state_event(self):
-        self.send_event("state", self.state_payload())
+        if self.ble.ready:
+            self.ble.publish_state(self.wire_state_payload(), event="stateChanged")
 
     def send_event(self, event, payload):
-        self.send_json({
-            "v": 1,
-            "type": "event",
-            "event": event,
-            "payload": payload,
-        })
-
-    def send_ack(self, req_id, cmd, ok, payload, error=None, message=None):
-        msg = {
-            "v": 1,
-            "id": req_id,
-            "type": "ack",
-            "cmd": cmd,
-            "ok": ok,
-            "payload": payload,
-        }
-        if error is not None:
-            msg["error"] = error
-        if message is not None:
-            msg["message"] = message
-        self.send_json(msg)
-
-    def send_error(self, req_id, cmd, error, message):
-        self.send_ack(req_id, cmd, False, {}, error, message)
-
-    def send_json(self, msg):
-        if not self.connected or self.conn is None:
+        if not self.ble.ready:
             return
-        try:
-            maopaoBle.send(json.dumps(msg).encode("utf-8"), conn=self.conn)
-        except Exception as exc:
-            print("[Pomodoro] send failed:", exc)
+        if isinstance(payload, dict) and "state" in payload and "phase" in payload:
+            payload = self.wire_state_payload(payload)
+        self.ble.send_event(event, payload)
+
+    def wire_state_payload(self, state=None):
+        if state is None:
+            state = self.state_payload()
+        wire = {
+            "s": state.get("state"),
+            "p": state.get("phase"),
+            "z": bool(state.get("paused", False)),
+            "d": state.get("durationSec", 0),
+            "l": state.get("timeLeftSec", 0),
+            "g": state.get("progress", 0),
+        }
+        if "completedCycles" in state:
+            wire["c"] = state.get("completedCycles", 0)
+        if "nextRestType" in state:
+            wire["n"] = state.get("nextRestType")
+        config = state.get("config")
+        if isinstance(config, dict):
+            wire["f"] = {
+                "f": config.get("focusMin"),
+                "a": bool(config.get("autoStartNext", False)),
+                "c": config.get("cycleCount"),
+                "s": config.get("shortBreakMin"),
+                "l": config.get("longBreakMin"),
+                "e": bool(config.get("soundEnabled", False)),
+            }
+        return wire
 
 
 def appMain():

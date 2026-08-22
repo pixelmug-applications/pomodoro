@@ -18,8 +18,6 @@ export type AppStatus =
   | 'syncing'
   | 'error';
 
-export type EndSound = 'classic' | 'gentle';
-
 export type PomodoroConfig = {
   focusMin: number;
   autoStartNext: boolean;
@@ -27,7 +25,6 @@ export type PomodoroConfig = {
   shortBreakMin: number;
   longBreakMin: number;
   soundEnabled: boolean;
-  endSound: EndSound;
 };
 
 export type PomodoroRuntimeState = {

@@ -87,7 +87,14 @@ export async function openMpsApp(
     timeoutMs: options.timeoutMs,
     onPhase: options.onPhase,
   });
-  const result = await installMpsApp(device, config);
+  let result;
+  try {
+    result = await installMpsApp(device, config);
+  } catch (error) {
+    clearPendingLaunch();
+    options.onPhase?.('failed');
+    throw error;
+  }
   const code = mpyExecReturnCode(result);
 
   if (code === 264) {

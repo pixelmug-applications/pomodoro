@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { SOUND_PREVIEWS } from '../assets';
 import { t } from '../i18n';
 import { useTemplateTimer } from '../state/templateTimer';
-import type { EndSound, PomodoroConfig } from '../types';
+import type { PomodoroConfig } from '../types';
 
 const store = useTemplateTimer();
 const durations = [15, 25, 45];
 const expanded = ref({
   options: true,
-  sound: true,
 });
 const customOpen = ref(!durations.includes(store.state.config.focusMin));
-let previewAudio: HTMLAudioElement | null = null;
-const activePreview = ref<EndSound | null>(null);
 
 const config = computed(() => store.state.config);
 const syncDisabled = computed(() => store.busy.value || !store.canSend.value);
@@ -52,44 +48,9 @@ async function syncConfig() {
   await store.syncConfig();
 }
 
-function stopPreview() {
-  if (previewAudio) {
-    previewAudio.pause();
-    previewAudio.currentTime = 0;
-  }
-  previewAudio = null;
-  activePreview.value = null;
-}
-
-function chooseSound(sound: EndSound) {
-  update({ endSound: sound });
-  if (!config.value.soundEnabled) {
-    stopPreview();
-    return;
-  }
-  if (activePreview.value === sound && previewAudio && !previewAudio.paused) {
-    stopPreview();
-    return;
-  }
-  stopPreview();
-  previewAudio = new Audio(SOUND_PREVIEWS[sound]);
-  previewAudio.volume = 0.8;
-  previewAudio.onended = () => {
-    activePreview.value = null;
-    previewAudio = null;
-  };
-  activePreview.value = sound;
-  previewAudio.play().catch(() => {
-    stopPreview();
-  });
-}
-
 function setSoundEnabled(event: Event) {
   const checked = (event.target as HTMLInputElement).checked;
   update({ soundEnabled: checked });
-  if (!checked) {
-    stopPreview();
-  }
 }
 
 function toInt(value: string, min: number, max: number, fallback: number) {
@@ -203,36 +164,14 @@ function toInt(value: string, min: number, max: number, fallback: number) {
     </section>
 
     <section class="accordion">
-      <button type="button" class="accordion-head" @click="toggle('sound')">
+      <label class="accordion-head sound-toggle-row">
         <span>{{ t('settings.soundAlerts') }}</span>
-        <b>{{ expanded.sound ? '-' : '+' }}</b>
-      </button>
-      <div v-if="expanded.sound" class="accordion-body">
-        <label class="setting-row">
-          <span>{{ t('settings.soundMaster') }}</span>
-          <input
-            type="checkbox"
-            :checked="config.soundEnabled"
-            @change="setSoundEnabled"
-          />
-        </label>
-        <div class="segmented">
-          <button
-            type="button"
-            :class="{ selected: config.endSound === 'classic', playing: activePreview === 'classic' }"
-            @click="chooseSound('classic')"
-          >
-            {{ t('settings.classic') }}
-          </button>
-          <button
-            type="button"
-            :class="{ selected: config.endSound === 'gentle', playing: activePreview === 'gentle' }"
-            @click="chooseSound('gentle')"
-          >
-            {{ t('settings.gentle') }}
-          </button>
-        </div>
-      </div>
+        <input
+          type="checkbox"
+          :checked="config.soundEnabled"
+          @change="setSoundEnabled"
+        />
+      </label>
     </section>
 
     <p v-if="store.businessStatusText.value" class="sync-note" :class="{ error: store.state.businessStatus === 'error' }">

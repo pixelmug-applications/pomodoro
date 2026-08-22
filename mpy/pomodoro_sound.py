@@ -3,8 +3,11 @@ from pyxel_prompt_sound import PromptSoundPlayer as OggPromptSoundPlayer
 
 
 ASSET_ROOT = "assets"
-SOUND_THEMES = ("classic", "gentle")
 PROMPT_SOUND_DEBUG = True
+PROMPT_SOUND_FILES = {
+    "focus_start": "focus_start.ogg",
+    "break_start": "break_start.ogg",
+}
 
 
 def debug_log(*args):
@@ -29,15 +32,15 @@ class PromptSoundPlayer:
             stop_handler=lambda player: player.cancel(),
         )
 
-    def start(self, theme, kind):
-        theme = self.normalize_theme(theme)
-        if kind not in ("start", "end"):
+    def start(self, kind):
+        filename = PROMPT_SOUND_FILES.get(kind)
+        if filename is None:
             debug_log("invalid kind", kind)
             return False
         if not self.ensure_audio():
             debug_log("ensure audio failed", self.last_error)
             return False
-        return self.player.play_theme(theme, kind, interrupt=True)
+        return self.player.play(filename, interrupt=True)
 
     def update(self, budget_packets=None):
         self.player.update(budget_packets=budget_packets)
@@ -59,12 +62,6 @@ class PromptSoundPlayer:
             except Exception:
                 pass
             self.initialized = False
-
-    def normalize_theme(self, theme):
-        theme = str(theme).lower()
-        if theme not in SOUND_THEMES:
-            return "classic"
-        return theme
 
     def ensure_audio(self):
         if self.initialized:

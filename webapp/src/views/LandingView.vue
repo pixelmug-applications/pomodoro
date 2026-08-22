@@ -14,6 +14,7 @@ const step = ref<LandingStep>('open');
 async function handleOpen() {
   const ok = await store.openOnDevice();
   step.value = ok ? 'enter' : 'open';
+  if (ok) void store.connectDevice();
 }
 
 async function handleEnter() {
@@ -22,7 +23,6 @@ async function handleEnter() {
     return;
   }
   router.push('/timers');
-  await store.connectDevice();
 }
 
 </script>
@@ -41,14 +41,14 @@ async function handleEnter() {
     </div>
 
     <div class="landing-actions">
-      <button class="landing-primary" :disabled="store.busy.value" @click="step === 'enter' ? handleEnter() : handleOpen()">
-        {{ store.openButtonLabel.value }}
+      <button class="landing-primary" :disabled="step === 'open' && store.busy.value" @click="step === 'enter' ? handleEnter() : handleOpen()">
+        {{ step === 'enter' ? t('landing.enter') : store.openButtonLabel.value }}
       </button>
       <p
-        v-if="store.statusText.value"
-        :class="store.state.status === 'error' ? 'landing-error' : 'landing-status'"
+        v-if="step === 'enter' || store.statusText.value"
+        :class="step === 'open' && store.state.status === 'error' ? 'landing-error' : 'landing-status'"
       >
-        {{ store.statusText.value }}
+        {{ step === 'enter' ? t('status.launchReady') : store.statusText.value }}
       </p>
     </div>
   </main>

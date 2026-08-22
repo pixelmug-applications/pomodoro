@@ -335,8 +335,7 @@ button:disabled {
   gap: 8px;
 }
 
-.duration-grid button,
-.segmented button {
+.duration-grid button {
   min-height: 45px;
   border: 2px solid #edf0f4;
   border-radius: 8px;
@@ -345,16 +344,12 @@ button:disabled {
   font-weight: 900;
 }
 
-.duration-grid button.selected,
-.segmented button.selected {
+.duration-grid button.selected {
   border-color: #ef4444;
   background: #ef4444;
   color: white;
 }
 
-.segmented button.playing {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.16);
-}
 
 .custom-row {
   display: grid;
@@ -422,7 +417,8 @@ button:disabled {
   border-top: 1px solid #f0f2f5;
 }
 
-.setting-row input[type="checkbox"] {
+.setting-row input[type="checkbox"],
+.sound-toggle-row input[type="checkbox"] {
   position: relative;
   width: 42px;
   height: 24px;
@@ -432,7 +428,8 @@ button:disabled {
   outline: none;
 }
 
-.setting-row input[type="checkbox"]::after {
+.setting-row input[type="checkbox"]::after,
+.sound-toggle-row input[type="checkbox"]::after {
   position: absolute;
   top: 4px;
   left: 4px;
@@ -444,11 +441,13 @@ button:disabled {
   transition: transform 160ms ease;
 }
 
-.setting-row input[type="checkbox"]:checked {
+.setting-row input[type="checkbox"]:checked,
+.sound-toggle-row input[type="checkbox"]:checked {
   background: #ef4444;
 }
 
-.setting-row input[type="checkbox"]:checked::after {
+.setting-row input[type="checkbox"]:checked::after,
+.sound-toggle-row input[type="checkbox"]:checked::after {
   transform: translateX(18px);
 }
 
@@ -457,12 +456,6 @@ button:disabled {
   background: #f7f8fb;
 }
 
-.segmented {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding-top: 12px;
-}
 
 .sync-note {
   min-height: 20px;

@@ -1,18 +1,40 @@
 import { computed, reactive } from 'vue';
-import type { DeviceInfo } from '../types';
+import { BleAppClient } from '../../../../jeejio-bubble/sdk/BleAppClient.js';
+import type { DeviceInfo, PomodoroRuntimeState } from '../types';
 import { getWebApp, hasJeeWebBridge } from './bubbleClient';
 
-type BlePayload = Record<string, unknown>;
+type LegacyBlePayload = {
+  [key: string]: unknown;
+  cmd?: string;
+  method?: string;
+  payload?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+};
 
+type WireConfig = {
+  f?: number;
+  a?: boolean;
+  c?: number;
+  s?: number;
+  l?: number;
+  e?: boolean;
+};
+
+type WireState = {
+  s?: string;
+  p?: string;
+  z?: boolean;
+  d?: number;
+  l?: number;
+  g?: number;
+  c?: number;
+  n?: 'short' | 'long' | null;
+  f?: WireConfig;
+};
+
+const APP_ID = 'Pomodoro';
 const READY_STATE = 'ready';
-const READY_STATES = new Set(['ready', 'connected']);
 const UNAVAILABLE_STATES = new Set(['disconnected', 'failed']);
-const ACK_READY_GRACE_MS = 1200;
-const BLE_CONNECT_TIMEOUT_MS = 15000;
-const BLE_CONNECT_TIMEOUT_MESSAGE = 'connecting ble time out.';
-const BLE_CONNECTING_MESSAGE = 'Connecting BLE...';
-const BLE_DISCONNECTED_MESSAGE = 'BLE disconnected.';
-const PROBE_TIMEOUT_MS = 1200;
 
 const state = reactive({
   connection: 'idle',
@@ -21,11 +43,10 @@ const state = reactive({
 });
 
 let currentDevice: DeviceInfo | null = null;
-let connecting: Promise<unknown> | null = null;
-let connectAttemptId = 0;
+let client: BleAppClient | null = null;
 
 const isReady = computed(() => state.connection === READY_STATE || !hasJeeWebBridge());
-const isConnecting = computed(() => state.connection === 'connecting' || Boolean(connecting));
+const isConnecting = computed(() => state.connection === 'connecting');
 const isUnavailable = computed(() => UNAVAILABLE_STATES.has(state.connection));
 
 export function useBleSession() {
@@ -36,94 +57,35 @@ export function useBleSession() {
       state.message = 'BLE mock connected.';
       return;
     }
-    if (state.connection === READY_STATE) return;
-    if (connecting) return connecting;
-
-    const attemptId = ++connectAttemptId;
-    state.connection = 'connecting';
-    state.message = BLE_CONNECTING_MESSAGE;
-    state.lastError = '';
-
-    connecting = withTimeout(
-      runConnectAttempt(device, attemptId),
-      BLE_CONNECT_TIMEOUT_MS,
-      BLE_CONNECT_TIMEOUT_MESSAGE,
-      () => {
-        if (attemptId !== connectAttemptId) return;
-        connecting = null;
-        markConnectFailed(new Error(BLE_CONNECT_TIMEOUT_MESSAGE));
-      },
-    )
-      .catch((error) => {
-        if (attemptId === connectAttemptId) {
-          connecting = null;
-          markConnectFailed(error);
-        }
-        throw error;
-      })
-      .finally(() => {
-        if (attemptId === connectAttemptId) {
-          connecting = null;
-        }
-      });
-
-    return connecting;
+    await getClient().ensureConnected(device);
   }
 
   async function reconnect() {
-    if (!currentDevice) return;
-    connectAttemptId += 1;
-    connecting = null;
-    state.connection = 'idle';
-    await ensureConnected(currentDevice);
+    if (!currentDevice || !hasJeeWebBridge()) return;
+    await getClient().reconnect();
   }
 
-  async function send(device: DeviceInfo, payload: BlePayload, options: Record<string, unknown> = {}) {
+  async function send(
+    device: DeviceInfo,
+    payload: LegacyBlePayload,
+    options: Record<string, unknown> = {},
+  ) {
     await ensureConnected(device);
-
     if (!hasJeeWebBridge()) {
-      return { code: 200, result: payload, mock: true };
+      return { code: 200, ok: true, result: { ok: true, payload: {} }, mock: true };
     }
 
-    try {
-      return await getWebApp().ble!.send(device, payload, {
-        writeType: 'withResponse',
-        timeoutMillis: 5000,
-        ...options,
-      });
-    } catch (error) {
-      state.connection = 'failed';
-      state.lastError = errorMessage(error);
-      state.message = state.lastError;
-      throw error;
-    }
+    const method = String(payload.cmd || payload.method || '');
+    if (!method) throw new Error('BLE command method is required');
+    const params = payload.payload || payload.params || {};
+    const response = await getClient().command(method, params, options);
+    return toLegacyResponse(response);
   }
 
   function bindState() {
-    if (!hasJeeWebBridge()) return () => undefined;
-    const listener = (event: { state?: string; data?: string }) => {
-      const next = normalizeConnectionState(event.state || event.data || 'unknown');
-      if (state.connection === READY_STATE && (next === 'idle' || next === 'unknown')) {
-        return;
-      }
-      if (next === 'connecting' && !connecting) {
-        return;
-      }
-      state.connection = next;
-      if (next === READY_STATE) {
-        state.message = 'BLE connected.';
-        state.lastError = '';
-      } else if (UNAVAILABLE_STATES.has(next)) {
-        state.message = 'PixelMug disconnected.';
-      } else if (state.connection !== 'connecting' && !connecting) {
-        state.message = BLE_DISCONNECTED_MESSAGE;
-      }
-    };
-
-    getWebApp().ble!.onState(listener);
-    return () => {
-      getWebApp().ble!.off('state', listener);
-    };
+    // BleAppClient owns the bridge listener for the lifetime of the WebApp.
+    if (hasJeeWebBridge()) getClient();
+    return () => undefined;
   }
 
   return {
@@ -138,106 +100,67 @@ export function useBleSession() {
   };
 }
 
-async function runConnectAttempt(device: DeviceInfo, attemptId: number) {
-  if (await probeExistingConnection(device)) {
-    markConnectReady(attemptId);
-    return { state: READY_STATE, reused: true };
-  }
-
-  const result = await getWebApp().ble!.connect(device, {
-    timeoutSeconds: BLE_CONNECT_TIMEOUT_MS / 1000,
-    waitForReady: false,
+function getClient() {
+  if (client) return client;
+  client = new BleAppClient(getWebApp().ble!, {
+    appId: APP_ID,
+    appVersion: '1.0.0',
+    connectTimeoutMillis: 15000,
+    sendTimeoutMillis: 5000,
   });
-  const bridgeState = await waitForBridgeState(ACK_READY_GRACE_MS);
-  if (bridgeState && UNAVAILABLE_STATES.has(bridgeState)) {
-    throw new Error(`BLE ${bridgeState}`);
-  }
-  markConnectReady(attemptId);
+  client.on('connectionState', (event) => {
+    state.connection = String(event.connection || 'unknown');
+    state.message = event.message || '';
+    state.lastError = event.lastError || '';
+  });
+  return client;
+}
+
+function toLegacyResponse(response: unknown) {
+  const message = response as { result?: unknown; rev?: number };
+  const result = decodeResult(message?.result);
+  return {
+    code: 200,
+    ok: true,
+    result: {
+      ok: true,
+      payload: result,
+      rev: message?.rev,
+    },
+  };
+}
+
+function decodeResult(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') return {};
+  const result = { ...(value as Record<string, unknown>) };
+  if (isWireState(result.state)) result.state = decodeWireState(result.state);
   return result;
 }
 
-function markConnectReady(attemptId: number) {
-  if (attemptId !== connectAttemptId) return;
-  state.connection = READY_STATE;
-  state.message = 'BLE connected.';
-  state.lastError = '';
+function isWireState(value: unknown): value is WireState {
+  return Boolean(value && typeof value === 'object' && ('s' in value || 'd' in value));
 }
 
-function markConnectFailed(error: unknown) {
-  state.connection = 'failed';
-  state.lastError = errorMessage(error);
-  state.message = state.lastError;
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error || 'Unknown error');
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string, onTimeout?: () => void) {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      onTimeout?.();
-      reject(new Error(message));
-    }, timeoutMs);
-
-    promise
-      .then((value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      })
-      .catch((error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      });
-  });
-}
-
-function normalizeConnectionState(value: string) {
-  return READY_STATES.has(value) ? READY_STATE : value;
-}
-
-async function probeExistingConnection(device: DeviceInfo) {
-  try {
-    await getWebApp().ble!.send(device, {
-      method: 'mpyPing',
-      id: `ping_${Date.now()}`,
-    }, {
-      writeType: 'withResponse',
-      timeoutMillis: PROBE_TIMEOUT_MS,
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function waitForBridgeState(timeoutMs: number) {
-  const ble = getWebApp().ble!;
-  const current = normalizeConnectionState(String((ble as { state?: string }).state || 'unknown'));
-  if (current === READY_STATE || UNAVAILABLE_STATES.has(current)) {
-    return Promise.resolve(current);
-  }
-
-  return new Promise<string | null>((resolve) => {
-    let done = false;
-    const cleanup = () => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      ble.off('state', listener);
+function decodeWireState(wire: WireState): PomodoroRuntimeState {
+  const runtime: PomodoroRuntimeState = {
+    state: String(wire.s || ''),
+    phase: String(wire.p || ''),
+    paused: Boolean(wire.z),
+    durationSec: Number(wire.d || 0),
+    timeLeftSec: Number(wire.l || 0),
+    progress: Number(wire.g || 0),
+  };
+  if (wire.c != null) runtime.completedCycles = Number(wire.c);
+  if (wire.n !== undefined) runtime.nextRestType = wire.n;
+  if (wire.f) {
+    runtime.config = {
+      focusMin: Number(wire.f.f || 0),
+      autoStartNext: Boolean(wire.f.a),
+      cycleCount: Number(wire.f.c || 0),
+      shortBreakMin: Number(wire.f.s || 0),
+      longBreakMin: Number(wire.f.l || 0),
+      soundEnabled: Boolean(wire.f.e),
     };
-    const listener = (event: { state?: string; data?: string }) => {
-      const next = normalizeConnectionState(event.state || event.data || 'unknown');
-      if (next === READY_STATE || UNAVAILABLE_STATES.has(next)) {
-        cleanup();
-        resolve(next);
-      }
-    };
-    const timer = setTimeout(() => {
-      cleanup();
-      resolve(null);
-    }, timeoutMs);
-
-    ble.onState(listener);
-  });
+  }
+  return runtime;
 }

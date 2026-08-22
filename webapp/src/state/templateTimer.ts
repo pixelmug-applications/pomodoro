@@ -15,7 +15,6 @@ const DEFAULT_CONFIG: PomodoroConfig = {
   shortBreakMin: 5,
   longBreakMin: 15,
   soundEnabled: true,
-  endSound: 'classic',
 };
 
 const state = reactive({
@@ -260,7 +259,6 @@ function normalizeConfig(config: PomodoroConfig): PomodoroConfig {
     shortBreakMin: clampInt(config.shortBreakMin, 1, 60, DEFAULT_CONFIG.shortBreakMin),
     longBreakMin: clampInt(config.longBreakMin, 1, 60, DEFAULT_CONFIG.longBreakMin),
     soundEnabled: Boolean(config.soundEnabled),
-    endSound: config.endSound === 'gentle' ? 'gentle' : 'classic',
   };
 }
 
