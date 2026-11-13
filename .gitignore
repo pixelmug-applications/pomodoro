@@ -1,7 +1,3 @@
-assets/
-bot/config.dev.js
-bot/config.pub.js
-
 # Python / MicroPython build artifacts
 __pycache__/
 *.py[cod]
@@ -12,15 +8,14 @@ mpy/dist/
 *.mps
 
 # WebApp dependencies and build output
-webapp/node_modules/
-webapp/dist/
+node_modules/
+dist/
 
 # Logs and local environment
 *.log
 .env
 .env.*
-bot/config.dev.js
-bot/config.pub.js
+debug/
 
 # Editor / OS noise
 .DS_Store

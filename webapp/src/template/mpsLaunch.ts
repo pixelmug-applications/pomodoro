@@ -14,8 +14,8 @@ export type MpsLaunchConfig = {
 
 export type MpsLaunchPhase = 'requesting' | 'preparing' | 'switching' | 'ready' | 'failed';
 
-const DEV_MPS_ID = import.meta.env.VITE_MPS_ID || '6270258176';
-const DEV_MPS_VERSION = import.meta.env.VITE_MPS_VERSION || '0.0.20';
+const DEV_MPS_ID = import.meta.env.VITE_MPS_ID || '';
+const DEV_MPS_VERSION = import.meta.env.VITE_MPS_VERSION || '';
 const MPS_OPEN_TIMEOUT_MS = 45000;
 const READY_EVENTS = new Set(['MPS_IS_RUNNING']);
 const FAILED_EVENTS = new Set(['INSTALL_FAIL', 'RUNNING_FAIL']);
@@ -49,6 +49,9 @@ export function getMpsLaunchConfig(): MpsLaunchConfig {
 }
 
 export async function installMpsApp(device: DeviceInfo, config = getMpsLaunchConfig()) {
+  if (!config.id || !config.version) {
+    throw new Error('MPS ID and version are required. Open this app from PixelMug Studio.');
+  }
   const rpc = {
     method: 'talMpyExecOneScript',
     params: {

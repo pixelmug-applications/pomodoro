@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { LOADING_IMAGE } from '../assets';
 import { t } from '../i18n';
@@ -24,6 +24,10 @@ async function handleEnter() {
   }
   router.push('/timers');
 }
+
+onMounted(() => {
+  void handleOpen();
+});
 
 </script>
 

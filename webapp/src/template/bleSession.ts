@@ -1,5 +1,5 @@
 import { computed, reactive } from 'vue';
-import { BleAppClient } from '../../../../jeejio-bubble/sdk/BleAppClient.js';
+import { BleAppClient } from '@jeejio-bubble/bot/sdk/BleAppClient.js';
 import type { DeviceInfo, PomodoroRuntimeState } from '../types';
 import { getWebApp, hasJeeWebBridge } from './bubbleClient';
 

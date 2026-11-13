@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '../types';
 
-import { BubbleWebApp } from '../../../../jeejio-bubble/sdk/WebApp.js';
+import { BubbleWebApp } from '@jeejio-bubble/bot/sdk/WebApp.js';
 
 export type DeviceEventItem = {
   method?: string;
