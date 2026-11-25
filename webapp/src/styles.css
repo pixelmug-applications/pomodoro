@@ -47,7 +47,7 @@ button:disabled {
   padding: 0 20px 34px;
   background:
     linear-gradient(rgba(7, 12, 22, 0.06), rgba(7, 12, 22, 0.58)),
-    url("./app-assets/landing-bg.png");
+    url("./app-assets/landing-bg.jpeg");
   background-position: center;
   background-size: cover;
   color: white;
@@ -56,7 +56,7 @@ button:disabled {
 .landing.open {
   background:
     linear-gradient(rgba(7, 12, 22, 0.06), rgba(7, 12, 22, 0.58)),
-    url("./app-assets/landing-bg.png");
+    url("./app-assets/landing-bg.jpeg");
   background-position: center;
   background-size: cover;
 }
@@ -64,7 +64,7 @@ button:disabled {
 .landing.enter {
   background:
     linear-gradient(rgba(7, 12, 22, 0.02), rgba(7, 12, 22, 0.54)),
-    url("./app-assets/landing-bg.png");
+    url("./app-assets/landing-bg.jpeg");
   background-position: center;
   background-size: cover;
 }
