@@ -11,5 +11,10 @@
   },
   "dependencies": {
     "@jeejio-bubble/bot": "0.1.9"
+  },
+  "pixelmug": {
+    "deploy": {
+      "exclude": ["debug"]
+    }
   }
 }
